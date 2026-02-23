@@ -1,0 +1,4 @@
+python-socketio[client]
+pyautogui
+pytest
+pytest-asyncio
