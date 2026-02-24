@@ -2,6 +2,8 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const Client = require('socket.io-client');
 const express = require('express');
+const request = require('supertest');
+const { app } = require('../server');
 
 describe('Socket.io Server', () => {
     let io, serverSocket, clientSocket1, clientSocket2;
@@ -86,5 +88,33 @@ describe('Socket.io Server', () => {
             clientSocket1.emit('join-room', roomCode, 'sender');
             clientSocket1.emit('keystroke', { roomCode, type: 'letter', payload: 'a' });
         }, 50);
+    });
+});
+
+describe('HTTP polling endpoints', () => {
+    test('should reject invalid event payload', async () => {
+        const response = await request(app)
+            .post('/api/rooms/1234/events')
+            .send({ type: 'letter' });
+
+        expect(response.status).toBe(400);
+    });
+
+    test('should enqueue and read events by room', async () => {
+        const roomCode = '9012';
+
+        const postResponse = await request(app)
+            .post(`/api/rooms/${roomCode}/events`)
+            .send({ type: 'letter', payload: 'z' });
+
+        expect(postResponse.status).toBe(202);
+        expect(postResponse.body.accepted).toBe(true);
+
+        const getResponse = await request(app).get(`/api/rooms/${roomCode}/events?since=0`);
+        expect(getResponse.status).toBe(200);
+        expect(getResponse.body.events.length).toBeGreaterThan(0);
+        expect(getResponse.body.events[0].type).toBe('letter');
+        expect(getResponse.body.events[0].payload).toBe('z');
+        expect(getResponse.body.nextSince).toBeGreaterThan(0);
     });
 });

@@ -1,4 +1,5 @@
 python-socketio[client]
 pyautogui
+requests
 pytest
 pytest-asyncio

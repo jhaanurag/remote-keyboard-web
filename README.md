@@ -4,12 +4,16 @@ A web-based version of the Remote Keyboard app that allows you to type on your c
 
 ## Architecture
 This project is split into two parts:
-1. **Server (Node.js + Socket.io)**: A central WebSocket server that routes keystrokes from the web sender to the desktop receiver using a 4-digit room code.
-2. **Client (Python)**: A desktop script that connects to the server, joins a room, and simulates keystrokes using `pyautogui`.
+1. **Server (Node.js + Socket.io + HTTP API)**: Routes keystrokes by room code. Supports both:
+- WebSocket (`socket.io`) transport
+- HTTP event queue transport (for polling clients)
+2. **Client (Python)**: Desktop receiver with transport choice (`websocket` or `http-polling`) that simulates keystrokes using `pyautogui`.
 
 ## Deployment (Vercel & Render)
 - **Frontend**: The `server/public` folder can be deployed directly to Vercel as a static site.
-- **Backend**: Vercel Serverless Functions do not support long-lived WebSockets (like Socket.io). You should deploy the `server` folder to a platform that supports WebSockets, such as **Render**, **Railway**, or **Heroku**.
+- **Backend**:
+- WebSocket mode needs a host that supports long-lived connections (Render, Railway, Heroku, etc).
+- HTTP polling mode works over normal HTTP endpoints (`/api/rooms/:roomCode/events`) and can be used when WebSockets are unavailable.
 
 ## Setup Instructions
 
@@ -28,11 +32,13 @@ pip install -r requirements.txt
 python client.py
 ```
 - Enter the server URL (e.g., `http://localhost:3000` or your deployed Render URL).
-- Enter a 4-digit room code (e.g., `1234`).
+- Enter a room code (e.g., `1234`).
+- Choose transport: `websocket` or `http-polling`.
 
 ### 3. Connect from the Web
 - Open `http://localhost:3000` (or your deployed Vercel URL) on your phone or another device.
-- Enter the same 4-digit room code.
+- Enter the same room code in the top field.
+- Use the top transport toggle to switch between `WebSocket` and `HTTP Polling`.
 - Start typing!
 
 ## Running Tests
@@ -48,3 +54,11 @@ npm test
 cd client
 pytest tests/
 ```
+
+## TODO
+- [x] Add transport toggle in web UI (`WebSocket` / `HTTP Polling`).
+- [x] Add HTTP polling event APIs on server.
+- [x] Support polling transport in desktop Python client.
+- [ ] Add authentication or per-room secret to prevent unauthorized typing.
+- [ ] Add message TTL/cleanup configuration via environment variables.
+- [ ] Add end-to-end test for web sender -> polling receiver flow.

@@ -3,57 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Remote Keyboard Web</title>
-    <link rel="stylesheet" href="/style.css">
+    <title>Remote Keyboard</title>
+    <link rel="stylesheet" href="/style.css?v=3">
     <!-- Load Socket.io client -->
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>Remote Keyboard</h1>
+
+        <div class="top-controls">
+            <label for="room-code">Room Code</label>
+            <input type="text" id="room-code" maxlength="8" placeholder="1234" autocomplete="off">
+            <label for="transport-mode">Transport</label>
+            <select id="transport-mode">
+                <option value="websocket">WebSocket</option>
+                <option value="http-polling">HTTP Polling</option>
+            </select>
+        </div>
         
-        <!-- Room Connection Section -->
-        <div id="connection-section" class="section active">
-            <h2>Connect to a Room</h2>
-            <p>Enter the 4-digit code shown on your computer.</p>
-            <input type="text" id="room-code" placeholder="e.g. 1234" maxlength="4">
-            <button id="join-btn" onclick="joinRoom()">Join Room</button>
-            <div id="status" class="status disconnected">Disconnected</div>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('instant')">Instant Mode</button>
+            <button class="tab-btn" onclick="switchTab('button')">Button Mode</button>
         </div>
 
-        <!-- Keyboard Controls Section -->
-        <div id="keyboard-section" class="section">
-            <div class="room-info">
-                Room: <span id="current-room"></span>
-                <button class="small-btn" onclick="leaveRoom()">Leave</button>
+        <!-- Instant Mode Section -->
+        <div id="instant-mode" class="mode-section active">
+            <div class="controls">
+                <label>
+                    <input type="radio" name="instant-type" value="letter" checked> Letter Send
+                </label>
+                <label>
+                    <input type="radio" name="instant-type" value="word"> Word Send
+                </label>
             </div>
-
-            <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('instant')">Instant Mode</button>
-                <button class="tab-btn" onclick="switchTab('button')">Button Mode</button>
+            <input type="text" id="letter-input" placeholder="Type here..." autocomplete="off">
+            <div id="word-input-wrapper" style="display:none;">
+                <textarea id="word-input" rows="3" placeholder="Voice type, paste, or type here..." autocomplete="off"></textarea>
+                <button id="word-send-btn" onclick="manualSendWord()">Send</button>
             </div>
-
-            <!-- Instant Mode Section -->
-            <div id="instant-mode" class="mode-section active">
-                <div class="controls">
-                    <label>
-                        <input type="radio" name="instant-type" value="letter" checked> Letter Send
-                    </label>
-                    <label>
-                        <input type="radio" name="instant-type" value="word"> Word Send
-                    </label>
-                </div>
-                <input type="text" id="instant-input" placeholder="Type here..." autocomplete="off">
-                <p class="hint">Text is sent automatically based on the selected mode.</p>
-            </div>
-
-            <!-- Button Mode Section -->
-            <div id="button-mode" class="mode-section">
-                <textarea id="button-input" rows="5" placeholder="Type your full message here..."></textarea>
-                <button id="send-btn" onclick="sendBlock()">Send Message</button>
-            </div>
+            <p class="hint">Text is sent automatically based on the selected mode.</p>
         </div>
+
+        <!-- Button Mode Section -->
+        <div id="button-mode" class="mode-section">
+            <textarea id="button-input" rows="5" placeholder="Type your full message here..."></textarea>
+            <button id="send-btn" onclick="sendBlock()">Send Message</button>
+        </div>
+        
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div id="transport-note" class="hint">Set room code and transport before typing.</div>
     </div>
-    <script src="/script.js"></script>
+    <script src="/script.js?v=3"></script>
 </body>
 </html>

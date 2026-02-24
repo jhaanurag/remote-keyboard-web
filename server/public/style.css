@@ -24,6 +24,36 @@ h1 {
     margin-top: 0;
 }
 
+.top-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.top-controls label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #444;
+}
+
+#transport-mode {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-sizing: border-box;
+    font-size: 16px;
+    margin-bottom: 2px;
+    background: white;
+}
+
+#transport-mode:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
 .section {
     display: none;
 }
@@ -123,8 +153,31 @@ button {
     transition: background 0.2s;
 }
 
+button#send-btn, button#word-send-btn {
+    width: 100%;
+    padding: 12px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button#send-btn:hover, button#word-send-btn:hover {
+    background: #218838;
+}
+
 button:hover {
     background: #218838;
+}
+
+#word-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .hint {
