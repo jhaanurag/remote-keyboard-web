@@ -2,6 +2,7 @@ const statusEl = document.getElementById('status');
 const roomCodeEl = document.getElementById('room-code');
 const transportModeEl = document.getElementById('transport-mode');
 const transportNoteEl = document.getElementById('transport-note');
+const sanitizeToggleEl = document.getElementById('sanitize-toggle');
 
 let socket = null;
 let socketReady = false;
@@ -112,7 +113,79 @@ function sendViaWebSocket(roomCode, type, payload) {
     socket.emit('keystroke', { roomCode, type, payload });
 }
 
+const COMMAND_KEYS = new Set([
+    'Backspace',
+    'Delete',
+    'Enter',
+    'Tab',
+    'Escape',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'Home',
+    'End',
+    'PageUp',
+    'PageDown'
+]);
+
+const MODIFIER_ONLY_KEYS = new Set([
+    'Shift',
+    'Control',
+    'Alt',
+    'Meta',
+    'AltGraph',
+    'CapsLock',
+    'NumLock',
+    'ScrollLock',
+    'Fn',
+    'ContextMenu',
+    'OS'
+]);
+
+function getInstantType() {
+    const selected = document.querySelector('input[name="instant-type"]:checked');
+    return selected ? selected.value : 'letter';
+}
+
+function isSanitizeEnabled() {
+    return sanitizeToggleEl.checked;
+}
+
+function normalizeKeyName(rawKey) {
+    if (rawKey === 'Esc') return 'Escape';
+    if (rawKey === 'Del') return 'Delete';
+    if (rawKey === 'Return') return 'Enter';
+    if (rawKey === 'Spacebar') return ' ';
+    return rawKey;
+}
+
+function sanitizeLetterKey(rawKey, keyboardEvent) {
+    const key = normalizeKeyName(rawKey);
+    if (MODIFIER_ONLY_KEYS.has(key)) return null;
+    if (keyboardEvent && (keyboardEvent.ctrlKey || keyboardEvent.metaKey || keyboardEvent.altKey)) {
+        return null;
+    }
+    if (key.length === 1 || COMMAND_KEYS.has(key)) {
+        return key;
+    }
+    return null;
+}
+
+function sanitizeOutgoing(type, payload) {
+    if (!isSanitizeEnabled() || type !== 'letter' || typeof payload !== 'string') {
+        return payload;
+    }
+
+    return sanitizeLetterKey(payload);
+}
+
 async function sendEvent(type, payload) {
+    const safePayload = sanitizeOutgoing(type, payload);
+    if (safePayload === null || safePayload === undefined || safePayload === '') {
+        return;
+    }
+
     const roomCode = getRoomCode();
     if (!roomCode) {
         setStatus('Room code is required', false);
@@ -124,10 +197,10 @@ async function sendEvent(type, payload) {
 
     try {
         if (currentTransport === 'websocket') {
-            sendViaWebSocket(roomCode, type, payload);
+            sendViaWebSocket(roomCode, type, safePayload);
             setStatus('Connected (WebSocket)', true);
         } else {
-            await sendViaHttp(roomCode, type, payload);
+            await sendViaHttp(roomCode, type, safePayload);
             setStatus('Sent (HTTP polling)', true);
         }
     } catch (error) {
@@ -135,7 +208,6 @@ async function sendEvent(type, payload) {
     }
 }
 
-// Tab switching logic
 function switchTab(tab) {
     document.querySelectorAll('.mode-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -146,25 +218,35 @@ function switchTab(tab) {
     }
 }
 
-// --- Separate inputs for each mode ---
 const letterInput = document.getElementById('letter-input');
 const wordInput = document.getElementById('word-input');
 const wordWrapper = document.getElementById('word-input-wrapper');
+const typewriterInput = document.getElementById('typewriter-input');
+const typewriterWrapper = document.getElementById('typewriter-input-wrapper');
+const instantTypeRadios = document.querySelectorAll('input[name="instant-type"]');
 
-// Show/hide appropriate input when mode changes
-document.querySelectorAll('input[name="instant-type"]').forEach(radio => {
+function applyInstantTypeUi(mode) {
+    if (mode === 'letter') {
+        letterInput.style.display = '';
+        wordWrapper.style.display = 'none';
+        typewriterWrapper.style.display = 'none';
+    } else if (mode === 'word') {
+        letterInput.style.display = 'none';
+        wordWrapper.style.display = '';
+        typewriterWrapper.style.display = 'none';
+    } else {
+        letterInput.style.display = 'none';
+        wordWrapper.style.display = 'none';
+        typewriterWrapper.style.display = '';
+    }
+}
+
+instantTypeRadios.forEach(radio => {
     radio.addEventListener('change', (e) => {
-        if (e.target.value === 'letter') {
-            letterInput.style.display = '';
-            wordWrapper.style.display = 'none';
-        } else {
-            letterInput.style.display = 'none';
-            wordWrapper.style.display = '';
-        }
+        applyInstantTypeUi(e.target.value);
     });
 });
 
-// === LETTER MODE ===
 letterInput.addEventListener('input', () => {
     const val = letterInput.value;
     if (val.length > 0) {
@@ -180,7 +262,19 @@ letterInput.addEventListener('keydown', (e) => {
     }
 });
 
-// === WORD MODE ===
+typewriterInput.addEventListener('keydown', (e) => {
+    const rawKey = normalizeKeyName(e.key);
+    const keyToSend = isSanitizeEnabled() ? sanitizeLetterKey(rawKey, e) : rawKey;
+
+    e.preventDefault();
+    if (!keyToSend) {
+        return;
+    }
+
+    sendEvent('letter', keyToSend);
+    typewriterInput.value = '';
+});
+
 function sendWordContent() {
     const val = wordInput.value;
     if (val.trim().length > 0) {
@@ -206,7 +300,7 @@ let lastWordValue = '';
 let wordStableCount = 0;
 
 setInterval(() => {
-    const mode = document.querySelector('input[name="instant-type"]:checked').value;
+    const mode = getInstantType();
     if (mode !== 'word') return;
 
     const val = wordInput.value;
@@ -255,6 +349,13 @@ window.switchTab = switchTab;
 
 roomCodeEl.value = localStorage.getItem('rk_room_code') || '';
 transportModeEl.value = currentTransport;
+sanitizeToggleEl.checked = localStorage.getItem('rk_sanitize_before_send') !== '0';
+
+sanitizeToggleEl.addEventListener('change', () => {
+    localStorage.setItem('rk_sanitize_before_send', sanitizeToggleEl.checked ? '1' : '0');
+});
+
+applyInstantTypeUi(getInstantType());
 
 roomCodeEl.addEventListener('change', () => {
     persistRoomCode();

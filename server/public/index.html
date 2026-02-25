@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remote Keyboard</title>
-    <link rel="stylesheet" href="/style.css?v=3">
+    <link rel="stylesheet" href="/style.css?v=4">
     <!-- Load Socket.io client -->
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -36,11 +36,21 @@
                 <label>
                     <input type="radio" name="instant-type" value="word"> Word Send
                 </label>
+                <label>
+                    <input type="radio" name="instant-type" value="typewriter"> Typewriter
+                </label>
             </div>
+            <label class="toggle-row">
+                <input type="checkbox" id="sanitize-toggle" checked>
+                Sanitize before sending (ignore modifier/command-only keys)
+            </label>
             <input type="text" id="letter-input" placeholder="Type here..." autocomplete="off">
             <div id="word-input-wrapper" style="display:none;">
                 <textarea id="word-input" rows="3" placeholder="Voice type, paste, or type here..." autocomplete="off"></textarea>
                 <button id="word-send-btn" onclick="manualSendWord()">Send</button>
+            </div>
+            <div id="typewriter-input-wrapper" style="display:none;">
+                <input type="text" id="typewriter-input" placeholder="Type naturally; keys send instantly" autocomplete="off">
             </div>
             <p class="hint">Text is sent automatically based on the selected mode.</p>
         </div>
@@ -54,6 +64,6 @@
         <div id="status" class="status disconnected">Disconnected</div>
         <div id="transport-note" class="hint">Set room code and transport before typing.</div>
     </div>
-    <script src="/script.js?v=3"></script>
+    <script src="/script.js?v=4"></script>
 </body>
 </html>
