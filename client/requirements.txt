@@ -1,5 +1,7 @@
 python-socketio[client]
 pyautogui
 requests
+fastapi
+uvicorn
 pytest
 pytest-asyncio
