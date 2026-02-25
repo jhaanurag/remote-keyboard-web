@@ -145,6 +145,10 @@ h1 {
     margin: 0;
 }
 
+#shortcut-denylist {
+    font-size: 14px;
+}
+
 input[type="text"], textarea {
     width: 100%;
     padding: 12px;
@@ -220,5 +224,23 @@ button:hover {
 }
 
 .status.disconnected {
+    color: #dc3545;
+}
+
+.delivery-status {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.delivery-status.ok {
+    color: #28a745;
+}
+
+.delivery-status.warn {
+    color: #b8860b;
+}
+
+.delivery-status.error {
     color: #dc3545;
 }

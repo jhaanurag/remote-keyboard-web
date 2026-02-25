@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Remote Keyboard</title>
-    <link rel="stylesheet" href="/style.css?v=4">
+    <link rel="stylesheet" href="/style.css?v=5">
     <!-- Load Socket.io client -->
     <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -44,6 +44,11 @@
                 <input type="checkbox" id="sanitize-toggle" checked>
                 Sanitize before sending (ignore modifier/command-only keys)
             </label>
+            <label class="toggle-row">
+                <input type="checkbox" id="deny-shortcuts-toggle" checked>
+                Block denied shortcuts
+            </label>
+            <input type="text" id="shortcut-denylist" placeholder="Ctrl+W, Ctrl+R, Alt+F4, Meta+Q" autocomplete="off">
             <input type="text" id="letter-input" placeholder="Type here..." autocomplete="off">
             <div id="word-input-wrapper" style="display:none;">
                 <textarea id="word-input" rows="3" placeholder="Voice type, paste, or type here..." autocomplete="off"></textarea>
@@ -62,8 +67,9 @@
         </div>
         
         <div id="status" class="status disconnected">Disconnected</div>
+        <div id="delivery-status" class="delivery-status">No events sent yet.</div>
         <div id="transport-note" class="hint">Set room code and transport before typing.</div>
     </div>
-    <script src="/script.js?v=4"></script>
+    <script src="/script.js?v=5"></script>
 </body>
 </html>

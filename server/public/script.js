@@ -1,16 +1,30 @@
 const statusEl = document.getElementById('status');
+const deliveryStatusEl = document.getElementById('delivery-status');
 const roomCodeEl = document.getElementById('room-code');
 const transportModeEl = document.getElementById('transport-mode');
 const transportNoteEl = document.getElementById('transport-note');
 const sanitizeToggleEl = document.getElementById('sanitize-toggle');
+const denyShortcutsToggleEl = document.getElementById('deny-shortcuts-toggle');
+const shortcutDenylistEl = document.getElementById('shortcut-denylist');
 
 let socket = null;
 let socketReady = false;
 let currentTransport = localStorage.getItem('rk_transport_mode') || 'websocket';
+let nextClientEventId = Number.parseInt(localStorage.getItem('rk_next_client_event_id') || '1', 10);
+const pendingAcks = new Map();
+let deniedShortcuts = new Set();
+
+const ACK_TIMEOUT_MS = 6000;
+const DEFAULT_DENYLIST = 'Ctrl+W,Ctrl+R,Alt+F4,Meta+Q';
 
 function setStatus(text, isConnected) {
     statusEl.textContent = text;
     statusEl.className = isConnected ? 'status connected' : 'status disconnected';
+}
+
+function setDeliveryStatus(text, tone = 'neutral') {
+    deliveryStatusEl.textContent = text;
+    deliveryStatusEl.className = `delivery-status ${tone}`.trim();
 }
 
 function updateTransportNote() {
@@ -20,9 +34,9 @@ function updateTransportNote() {
         return;
     }
     if (currentTransport === 'websocket') {
-        transportNoteEl.textContent = 'WebSocket mode: low-latency live typing.';
+        transportNoteEl.textContent = 'WebSocket mode: low-latency live typing with ACK status.';
     } else {
-        transportNoteEl.textContent = 'HTTP polling mode: works without WebSockets (higher latency).';
+        transportNoteEl.textContent = 'HTTP polling mode: works without WebSockets (higher latency, no execution ACK).';
     }
 }
 
@@ -50,6 +64,44 @@ function ensureSocket() {
         } else {
             setStatus('Enter room code', false);
         }
+    });
+
+    socket.on('delivery-ack', (data = {}) => {
+        const { roomCode, clientEventId, eventId } = data;
+        if (!clientEventId || roomCode !== getRoomCode()) {
+            return;
+        }
+
+        const record = pendingAcks.get(clientEventId);
+        if (!record) {
+            return;
+        }
+
+        record.eventId = eventId;
+        record.phase = 'queued';
+        setDeliveryStatus(`Queued #${eventId}`, 'neutral');
+    });
+
+    socket.on('execution-ack', (data = {}) => {
+        const { roomCode, clientEventId, eventId, ok, error } = data;
+        if (!clientEventId || roomCode !== getRoomCode()) {
+            return;
+        }
+
+        const record = pendingAcks.get(clientEventId);
+        if (!record) {
+            return;
+        }
+
+        clearTimeout(record.timer);
+        pendingAcks.delete(clientEventId);
+
+        if (ok === false) {
+            setDeliveryStatus(`Execution failed #${eventId || '?'}: ${error || 'unknown error'}`, 'error');
+            return;
+        }
+
+        setDeliveryStatus(`Executed #${eventId || '?'}`, 'ok');
     });
 
     socket.on('disconnect', () => {
@@ -97,7 +149,7 @@ async function sendViaHttp(roomCode, type, payload) {
     }
 }
 
-function sendViaWebSocket(roomCode, type, payload) {
+function sendViaWebSocket(roomCode, type, payload, clientEventId) {
     ensureSocket();
     if (!socket) {
         throw new Error('WebSocket is not available on this deployment');
@@ -109,8 +161,21 @@ function sendViaWebSocket(roomCode, type, payload) {
     if (!socketReady) {
         throw new Error('WebSocket not ready');
     }
+
+    const timer = setTimeout(() => {
+        if (!pendingAcks.has(clientEventId)) {
+            return;
+        }
+
+        pendingAcks.delete(clientEventId);
+        setDeliveryStatus(`No execution ACK yet for client event ${clientEventId}`, 'warn');
+    }, ACK_TIMEOUT_MS);
+
+    pendingAcks.set(clientEventId, { timer, phase: 'sent', eventId: null });
+
     socket.emit('join-room', roomCode, 'sender');
-    socket.emit('keystroke', { roomCode, type, payload });
+    socket.emit('keystroke', { roomCode, type, payload, clientEventId });
+    setDeliveryStatus(`Sent client event ${clientEventId}`, 'neutral');
 }
 
 const COMMAND_KEYS = new Set([
@@ -160,6 +225,92 @@ function normalizeKeyName(rawKey) {
     return rawKey;
 }
 
+function normalizeModifierName(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return '';
+    if (key === 'ctrl' || key === 'control') return 'Control';
+    if (key === 'alt' || key === 'option') return 'Alt';
+    if (key === 'shift') return 'Shift';
+    if (key === 'cmd' || key === 'command' || key === 'meta' || key === 'win' || key === 'super') return 'Meta';
+    return '';
+}
+
+function normalizeShortcutMain(mainKey) {
+    const key = normalizeKeyName(mainKey).trim();
+    if (!key) return '';
+    if (key.length === 1) return key.toUpperCase();
+    return key;
+}
+
+function normalizeShortcutToken(token) {
+    const parts = token.split('+').map(part => part.trim()).filter(Boolean);
+    if (parts.length < 2) {
+        return '';
+    }
+
+    const modifiers = [];
+    for (let i = 0; i < parts.length - 1; i++) {
+        const modifier = normalizeModifierName(parts[i]);
+        if (!modifier) {
+            return '';
+        }
+        if (!modifiers.includes(modifier)) {
+            modifiers.push(modifier);
+        }
+    }
+
+    const main = normalizeShortcutMain(parts[parts.length - 1]);
+    if (!main) {
+        return '';
+    }
+
+    return `${modifiers.sort().join('+')}+${main}`;
+}
+
+function parseDenylist(rawValue) {
+    return new Set(
+        rawValue
+            .split(',')
+            .map(token => normalizeShortcutToken(token))
+            .filter(Boolean)
+    );
+}
+
+function keyboardEventToShortcut(event, rawKey) {
+    const modifiers = [];
+    if (event.ctrlKey) modifiers.push('Control');
+    if (event.altKey) modifiers.push('Alt');
+    if (event.shiftKey) modifiers.push('Shift');
+    if (event.metaKey) modifiers.push('Meta');
+    if (modifiers.length === 0) {
+        return '';
+    }
+
+    const main = normalizeShortcutMain(rawKey);
+    if (!main) {
+        return '';
+    }
+
+    return `${modifiers.sort().join('+')}+${main}`;
+}
+
+function isShortcutDenied(event, rawKey) {
+    if (!denyShortcutsToggleEl.checked) {
+        return '';
+    }
+
+    const shortcut = keyboardEventToShortcut(event, rawKey);
+    if (!shortcut) {
+        return '';
+    }
+
+    return deniedShortcuts.has(shortcut) ? shortcut : '';
+}
+
+function refreshDenylist() {
+    deniedShortcuts = parseDenylist(shortcutDenylistEl.value);
+}
+
 function sanitizeLetterKey(rawKey, keyboardEvent) {
     const key = normalizeKeyName(rawKey);
     if (MODIFIER_ONLY_KEYS.has(key)) return null;
@@ -180,6 +331,17 @@ function sanitizeOutgoing(type, payload) {
     return sanitizeLetterKey(payload);
 }
 
+function nextEventId() {
+    if (!Number.isFinite(nextClientEventId) || nextClientEventId < 1) {
+        nextClientEventId = 1;
+    }
+
+    const current = nextClientEventId;
+    nextClientEventId += 1;
+    localStorage.setItem('rk_next_client_event_id', String(nextClientEventId));
+    return current;
+}
+
 async function sendEvent(type, payload) {
     const safePayload = sanitizeOutgoing(type, payload);
     if (safePayload === null || safePayload === undefined || safePayload === '') {
@@ -197,14 +359,17 @@ async function sendEvent(type, payload) {
 
     try {
         if (currentTransport === 'websocket') {
-            sendViaWebSocket(roomCode, type, safePayload);
+            const clientEventId = nextEventId();
+            sendViaWebSocket(roomCode, type, safePayload, clientEventId);
             setStatus('Connected (WebSocket)', true);
         } else {
             await sendViaHttp(roomCode, type, safePayload);
             setStatus('Sent (HTTP polling)', true);
+            setDeliveryStatus('Delivered to server (HTTP polling). Execution ACK unavailable.', 'neutral');
         }
     } catch (error) {
         setStatus(`Send failed: ${error.message}`, false);
+        setDeliveryStatus(`Send failed: ${error.message}`, 'error');
     }
 }
 
@@ -264,9 +429,16 @@ letterInput.addEventListener('keydown', (e) => {
 
 typewriterInput.addEventListener('keydown', (e) => {
     const rawKey = normalizeKeyName(e.key);
-    const keyToSend = isSanitizeEnabled() ? sanitizeLetterKey(rawKey, e) : rawKey;
+    const denied = isShortcutDenied(e, rawKey);
 
     e.preventDefault();
+
+    if (denied) {
+        setDeliveryStatus(`Blocked shortcut: ${denied}`, 'warn');
+        return;
+    }
+
+    const keyToSend = isSanitizeEnabled() ? sanitizeLetterKey(rawKey, e) : rawKey;
     if (!keyToSend) {
         return;
     }
@@ -350,12 +522,24 @@ window.switchTab = switchTab;
 roomCodeEl.value = localStorage.getItem('rk_room_code') || '';
 transportModeEl.value = currentTransport;
 sanitizeToggleEl.checked = localStorage.getItem('rk_sanitize_before_send') !== '0';
+denyShortcutsToggleEl.checked = localStorage.getItem('rk_deny_shortcuts_enabled') !== '0';
+shortcutDenylistEl.value = localStorage.getItem('rk_shortcut_denylist') || DEFAULT_DENYLIST;
 
 sanitizeToggleEl.addEventListener('change', () => {
     localStorage.setItem('rk_sanitize_before_send', sanitizeToggleEl.checked ? '1' : '0');
 });
 
+denyShortcutsToggleEl.addEventListener('change', () => {
+    localStorage.setItem('rk_deny_shortcuts_enabled', denyShortcutsToggleEl.checked ? '1' : '0');
+});
+
+shortcutDenylistEl.addEventListener('change', () => {
+    localStorage.setItem('rk_shortcut_denylist', shortcutDenylistEl.value.trim());
+    refreshDenylist();
+});
+
 applyInstantTypeUi(getInstantType());
+refreshDenylist();
 
 roomCodeEl.addEventListener('change', () => {
     persistRoomCode();
@@ -385,3 +569,4 @@ if (currentTransport === 'websocket') {
 }
 
 updateTransportNote();
+setDeliveryStatus('No events sent yet.');

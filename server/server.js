@@ -97,13 +97,41 @@ io.on('connection', (socket) => {
 
     // Handle keystroke events
     socket.on('keystroke', (data) => {
-        const { roomCode, type, payload } = data;
+        const { roomCode, type, payload, clientEventId } = data || {};
         if (!roomCode || !type || payload === undefined || payload === null) {
             return;
         }
-        queueEvent(roomCode, type, payload);
+        const event = queueEvent(roomCode, type, payload);
+        socket.emit('delivery-ack', {
+            roomCode,
+            clientEventId,
+            eventId: event.id,
+            queuedAt: event.ts
+        });
         // Broadcast to everyone else in the room (specifically the desktop receiver)
-        socket.to(roomCode).emit('keystroke', { type, payload });
+        socket.to(roomCode).emit('keystroke', {
+            roomCode,
+            type,
+            payload,
+            clientEventId,
+            eventId: event.id
+        });
+    });
+
+    socket.on('execution-ack', (data) => {
+        const { roomCode, eventId, clientEventId, ok, error } = data || {};
+        if (!roomCode || !eventId) {
+            return;
+        }
+
+        io.to(roomCode).emit('execution-ack', {
+            roomCode,
+            eventId,
+            clientEventId,
+            ok: ok !== false,
+            error: error || null,
+            executedAt: Date.now()
+        });
     });
 
     socket.on('disconnect', () => {
