@@ -1,5 +1,5 @@
 # Remote Keyboard Web
-
+Designed this as a lightweight alternative to WisprFlow, using Google Voice Typing for remote desktop input.
 Remote Keyboard Web lets you type on a desktop machine from a phone/browser using a shared room code.
 
 It supports two transport modes:
